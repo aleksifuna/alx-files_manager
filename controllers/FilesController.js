@@ -1,6 +1,7 @@
 import fs from 'fs';
 import { ObjectId } from 'mongodb';
 import { v4 as uuidv4 } from 'uuid';
+import mime from 'mime-types';
 import redisClient from '../utils/redis';
 import dbClient from '../utils/db';
 
@@ -194,4 +195,39 @@ export async function putUnpublish(req, resp) {
     delete document.localPath;
   }
   return resp.status(200).json(document);
+}
+
+export async function getFile(req, resp) {
+  const token = req.headers['x-token'];
+  let userId = null;
+
+  if (token) {
+    userId = await redisClient.get(`auth_${token}`);
+    if (!userId) {
+      userId = null;
+    }
+  }
+  const documentId = req.params.id;
+  const document = await fileCollection.findOne({
+    _id: ObjectId(documentId),
+  });
+  if (!document) {
+    return resp.status(404).json({ error: 'Not found' });
+  }
+  if (!document.isPublic && (!userId || !ObjectId(userId).equals(document.userId))) {
+    return resp.status(404).json({ error: 'Not found' });
+  }
+  if (document.type === 'folder') {
+    return resp.status(400).json({ error: "A folder doesn't have content" });
+  }
+  fs.readFile(document.localPath, (err, data) => {
+    if (err) {
+      console.log(document.localPath);
+      return resp.status(404).json({ error: 'Not found' });
+    }
+    const mimeType = mime.lookup(document.name);
+    resp.setHeader('Content-Type', mimeType);
+    return resp.status(200).send(data);
+  });
+  return resp.status(404).json({ error: 'Not found' });
 }
