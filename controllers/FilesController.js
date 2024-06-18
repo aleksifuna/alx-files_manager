@@ -143,3 +143,55 @@ export async function getIndex(req, resp) {
   ]).toArray();
   return resp.status(200).json(results);
 }
+
+export async function putPublish(req, resp) {
+  const token = req.headers['x-token'];
+  if (!token) {
+    return resp.status(401).json({ error: 'Unauthorized' });
+  }
+  const userId = await redisClient.get(`auth_${token}`);
+  if (!userId) {
+    return resp.status(401).json({ error: 'Unauthorized' });
+  }
+  const documentId = req.params.id;
+  const results = await fileCollection.updateOne(
+    { _id: ObjectId(documentId), userId: ObjectId(userId) },
+    { $set: { isPublic: true } },
+  );
+  if (results.matchedCount === 0) {
+    return resp.status(404).json({ error: 'Not found' });
+  }
+  const document = await fileCollection.findOne({ _id: ObjectId(documentId) });
+  document.id = document._id;
+  delete document._id;
+  if (document.localPath) {
+    delete document.localPath;
+  }
+  return resp.status(200).json(document);
+}
+
+export async function putUnpublish(req, resp) {
+  const token = req.headers['x-token'];
+  if (!token) {
+    return resp.status(401).json({ error: 'Unauthorized' });
+  }
+  const userId = await redisClient.get(`auth_${token}`);
+  if (!userId) {
+    return resp.status(401).json({ error: 'Unauthorized' });
+  }
+  const documentId = req.params.id;
+  const results = await fileCollection.updateOne(
+    { _id: ObjectId(documentId), userId: ObjectId(userId) },
+    { $set: { isPublic: false } },
+  );
+  if (results.matchedCount === 0) {
+    return resp.status(404).json({ error: 'Not found' });
+  }
+  const document = await fileCollection.findOne({ _id: ObjectId(documentId) });
+  document.id = document._id;
+  delete document._id;
+  if (document.localPath) {
+    delete document.localPath;
+  }
+  return resp.status(200).json(document);
+}
