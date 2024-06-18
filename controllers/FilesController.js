@@ -4,12 +4,13 @@ import { v4 as uuidv4 } from 'uuid';
 import redisClient from '../utils/redis';
 import dbClient from '../utils/db';
 
-export default async function postUpload(req, resp) {
+const fileCollection = dbClient.client.db().collection('files');
+
+export async function postUpload(req, resp) {
   const folderPath = process.env.FOLDER_PATH || '/tmp/files_manager';
   const token = req.headers['x-token'];
   const { name, type, data } = req.body;
   let { parentId, isPublic } = req.body;
-  const fileCollection = dbClient.client.db().collection('files');
   if (!token) {
     return resp.status(401).json({ error: 'Unauthorized' });
   }
@@ -64,7 +65,7 @@ export default async function postUpload(req, resp) {
   const fileUuid = uuidv4();
   fs.writeFileSync(`${folderPath}/${fileUuid}`, buffer);
   const insertionInfo = await fileCollection.insertOne({
-    userId,
+    userId: ObjectId(userId),
     name,
     type,
     isPublic,
@@ -80,4 +81,65 @@ export default async function postUpload(req, resp) {
     isPublic,
     parentId,
   });
+}
+
+export async function getShow(req, resp) {
+  const fileId = req.params.id;
+  const token = req.headers['x-token'];
+  if (!token) {
+    return resp.status(401).json({ error: 'Unauthorized' });
+  }
+  const userId = await redisClient.get(`auth_${token}`);
+  if (!userId) {
+    return resp.status(401).json({ error: 'Unauthorized' });
+  }
+  const document = await fileCollection.findOne({
+    _id: ObjectId(fileId),
+    userId: ObjectId(userId),
+  });
+  if (!document) {
+    return resp.status(404).json({ error: 'not found' });
+  }
+  document.id = document._id;
+  delete document._id;
+  if (document.localPath) {
+    delete document.localPath;
+  }
+  return resp.status(200).json(document);
+}
+
+export async function getIndex(req, resp) {
+  const token = req.headers['x-token'];
+  if (!token) {
+    return resp.status(401).json({ error: 'Unauthorized' });
+  }
+  const userId = await redisClient.get(`auth_${token}`);
+  if (!userId) {
+    return resp.status(401).json({ error: 'Unauthorized' });
+  }
+  const { parentId } = req.query;
+  const page = parseInt(req.query.page, 10) || 0;
+  const matchingCriteria = {
+    userId: ObjectId(userId),
+  };
+  if (parentId) {
+    matchingCriteria.parentId = parentId;
+  }
+  const results = await fileCollection.aggregate([
+    { $match: matchingCriteria },
+    { $skip: page * 20 },
+    { $limit: 20 },
+    {
+      $project: {
+        _id: 0,
+        id: '$_id',
+        userId: 1,
+        name: 1,
+        type: 1,
+        isPublic: 1,
+        parentId: 1,
+      },
+    },
+  ]).toArray();
+  return resp.status(200).json(results);
 }
