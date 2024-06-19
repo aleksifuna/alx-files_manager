@@ -105,7 +105,7 @@ export async function getShow(req, resp) {
     userId: ObjectId(userId),
   });
   if (!document) {
-    return resp.status(404).json({ error: 'not found' });
+    return resp.status(404).json({ error: 'Not found' });
   }
   document.id = document._id;
   delete document._id;
