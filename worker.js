@@ -5,7 +5,9 @@ import { promises as fs } from 'fs';
 import dbClient from './utils/db';
 
 const thumbNailQueue = new Bull('fileQueue');
+const welcome = new Bull('userQueue');
 const fileCollection = dbClient.client.db().collection('files');
+const userCollection = dbClient.client.db().collection('users');
 
 async function createThumbnail(localPath) {
   const task500 = imageThumbnail(localPath, { width: 500 });
@@ -39,4 +41,16 @@ thumbNailQueue.process(async (job) => {
   } catch (error) {
     throw new Error('File not found');
   }
+});
+
+welcome.process(async (job) => {
+  const { userId } = job.data;
+  if (!userId) {
+    throw new Error('Missing userId');
+  }
+  const user = await userCollection.findOne({ _id: ObjectId(userId) });
+  if (!user) {
+    throw new Error('User not found');
+  }
+  console.log(`Welcome ${user.email}!`);
 });
