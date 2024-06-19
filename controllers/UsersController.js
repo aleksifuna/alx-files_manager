@@ -7,21 +7,18 @@ export async function postNew(req, res) {
   const collection = dbClient.client.db().collection('users');
   const { email, password } = req.body;
   if (!email) {
-    res.status(400).json({ error: 'Missing email' });
-    return;
+    return res.status(400).json({ error: 'Missing email' });
   }
   if (!password) {
-    res.status(400).json({ error: 'Missing password' });
-    return;
+    return res.status(400).json({ error: 'Missing password' });
   }
   const user = await collection.findOne({ email });
   if (user) {
-    res.status(400).json('error: Already exist');
-    return;
+    return res.status(400).json({ error: 'Already exist' });
   }
   const insertionInfo = await collection.insertOne({ email, password: sha1(password) });
   const userId = insertionInfo.insertedId.toString();
-  res.status(201).json({ email, id: userId });
+  return res.status(201).json({ email, id: userId });
 }
 
 export async function getMe(req, resp) {
