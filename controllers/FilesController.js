@@ -2,9 +2,11 @@ import fs from 'fs';
 import { ObjectId } from 'mongodb';
 import { v4 as uuidv4 } from 'uuid';
 import mime from 'mime-types';
+import Bull from 'bull';
 import redisClient from '../utils/redis';
 import dbClient from '../utils/db';
 
+const thumbNailQueue = new Bull('fileQueue');
 const fileCollection = dbClient.client.db().collection('files');
 
 export async function postUpload(req, resp) {
@@ -74,6 +76,9 @@ export async function postUpload(req, resp) {
     localPath: `${folderPath}/${fileUuid}`,
   });
   const fileId = insertionInfo.insertedId.toString();
+  if (type === 'image') {
+    await thumbNailQueue.add({ userId, fileId });
+  }
   return resp.status(201).json({
     id: fileId,
     userId,
@@ -220,14 +225,17 @@ export async function getFile(req, resp) {
   if (document.type === 'folder') {
     return resp.status(400).json({ error: "A folder doesn't have content" });
   }
-  fs.readFile(document.localPath, (err, data) => {
-    if (err) {
-      console.log(document.localPath);
-      return resp.status(404).json({ error: 'Not found' });
-    }
+  let { localPath } = document;
+  const { size } = req.query;
+  if (size) {
+    localPath = `${localPath}_${size}`;
+  }
+  try {
+    const data = await fs.promises.readFile(localPath);
     const mimeType = mime.lookup(document.name);
     resp.setHeader('Content-Type', mimeType);
     return resp.status(200).send(data);
-  });
-  return resp.status(404).json({ error: 'Not found' });
+  } catch (error) {
+    return resp.status(404).json({ error: 'Not found' });
+  }
 }
