@@ -41,6 +41,7 @@ export async function postUpload(req, resp) {
     if (parentFolder.type !== 'folder') {
       return resp.status(400).json({ error: 'Parent is not a folder' });
     }
+    parentId = ObjectId(parentId);
   } else {
     parentId = 0;
   }
@@ -129,7 +130,7 @@ export async function getIndex(req, resp) {
     userId: ObjectId(userId),
   };
   if (parentId) {
-    matchingCriteria.parentId = parentId;
+    matchingCriteria.parentId = ObjectId(parentId);
   }
   const results = await fileCollection.aggregate([
     { $match: matchingCriteria },
